@@ -1,0 +1,40 @@
+{
+  "name": "cdn",
+  "version": "1.0.0",
+  "author": "norelock <github.com/norelockk>",
+  "license": "private",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/launcher.js build",
+    "build:go": "node scripts/launcher.js build:go",
+    "build:ts": "node scripts/launcher.js build:ts",
+    "start": "node scripts/launcher.js start",
+    "dev": "node scripts/launcher.js dev",
+    "dev:watch": "node scripts/launcher.js dev:watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "node scripts/launcher.js clean",
+    "build:clean": "node scripts/launcher.js build:clean"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/fluent-ffmpeg": "^2.1.27",
+    "@types/lzma-native": "^4.0.4",
+    "@types/ws": "^8.5.14",
+    "@types/yauzl": "^2.10.3",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.7.3"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "axios": "^1.7.9",
+    "express": "^4.21.2",
+    "fluent-ffmpeg": "^2.1.3",
+    "lzma-native": "^8.0.6",
+    "node-media-server": "2.7.4",
+    "tar": "^7.4.3",
+    "uuid": "^11.1.0",
+    "ws": "^8.18.1",
+    "yauzl": "^3.2.0"
+  }
+}

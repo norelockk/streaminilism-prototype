@@ -1,0 +1,5 @@
+vod
+dist
+node_modules
+streaming-config.json
+src/go/bunny-upload.*
