@@ -1,5 +1,9 @@
 vod
 dist
 node_modules
+config-backups
 streaming-config.json
+
+# ignore as well the binary from src/go
+src/go/bunny-upload
 src/go/bunny-upload.*
