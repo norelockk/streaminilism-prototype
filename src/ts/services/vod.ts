@@ -3,7 +3,7 @@ import path from 'path';
 import os from 'os';
 import ffmpeg, { FfmpegCommand } from 'fluent-ffmpeg';
 import { VodConfig, RecordingMetadata, StreamIndex, RecordingFormat } from '../types';
-import { sanitizeRecordingsIndex } from '../utils';
+import { Logger, LogLevel, sanitizeRecordingsIndex } from '../utils';
 import { FFmpegService } from './ffmpeg';
 import { CDNService } from './cdn';
 import { ConfigService } from './config';
@@ -57,12 +57,12 @@ export class VodService {
   }
 
   private async detectAllUnsignedRecordingsOnLaunch(): Promise<void> {
-    console.log('[VOD] Starting detection of unsigned recordings on launch');
+    Logger.log(LogLevel.INFO, '[VOD] Starting detection of unsigned recordings on launch');
 
     try {
       // Ensure temp directory exists
       if (!fs.existsSync(this.vodDir)) {
-        console.log(`[VOD] Temp directory does not exist: ${this.vodDir}`);
+        Logger.log(LogLevel.INFO, `[VOD] Temp directory does not exist: ${this.vodDir}`);
         return;
       }
 
@@ -73,21 +73,21 @@ export class VodService {
           return fs.statSync(fullPath).isDirectory();
         });
 
-      console.log(`[VOD] Stream directories found: ${streamDirs.join(', ')}`);
+      Logger.log(LogLevel.INFO, `[VOD] Stream directories found: ${streamDirs.join(', ')}`);
 
       // Process each stream directory
       for (const streamName of streamDirs) {
         try {
-          console.log(`[VOD] Detecting unsigned recordings for stream: ${streamName}`);
+          Logger.log(LogLevel.INFO, `[VOD] Detecting unsigned recordings for stream: ${streamName}`);
           await this.detectUnsignedRecordings(streamName);
         } catch (streamError) {
-          console.error(`[VOD] Error processing stream ${streamName}:`, streamError);
+          Logger.log(LogLevel.ERROR, `[VOD] Error processing stream ${streamName}:`, streamError);
         }
       }
 
-      console.log('[VOD] Completed detection of unsigned recordings on launch');
+      Logger.log(LogLevel.INFO, '[VOD] Completed detection of unsigned recordings on launch');
     } catch (error) {
-      console.error('[VOD] Error during launch-time unsigned recordings detection:', error);
+      Logger.log(LogLevel.ERROR, '[VOD] Error during launch-time unsigned recordings detection:', error);
     }
   }
 
@@ -113,11 +113,11 @@ export class VodService {
 
   private async handleFfmpegError(error: Error, info: VodStreamInfo): Promise<void> {
     if (this.isShuttingDown) {
-      console.log(`[VOD] Ignoring ffmpeg error during shutdown for ${info.streamPath}`);
+      Logger.log(LogLevel.INFO, `[VOD] Ignoring ffmpeg error during shutdown for ${info.streamPath}`);
       return;
     }
 
-    console.error(`[VOD] FFmpeg error for ${info.streamPath}:`, error);
+    Logger.log(LogLevel.ERROR, `[VOD] FFmpeg error for ${info.streamPath}:`, error);
 
     try {
       if (fs.existsSync(info.metadataPath)) {
@@ -127,15 +127,15 @@ export class VodService {
         fs.writeFileSync(info.metadataPath, JSON.stringify(metadata, null, 2));
       }
     } catch (err) {
-      console.error(`[VOD] Failed to update metadata after error:`, err);
+      Logger.log(LogLevel.ERROR, `[VOD] Failed to update metadata after error:`, err);
     }
   }
 
   private async handleFfmpegEnd(info: VodStreamInfo): Promise<void> {
     if (this.isShuttingDown) {
-      console.log(`[VOD] Recording ended during shutdown for ${info.streamPath}`);
+      Logger.log(LogLevel.INFO, `[VOD] Recording ended during shutdown for ${info.streamPath}`);
     } else {
-      console.log(`[VOD] Recording completed normally for ${info.streamPath}`);
+      Logger.log(LogLevel.INFO, `[VOD] Recording completed normally for ${info.streamPath}`);
     }
 
     try {
@@ -162,13 +162,13 @@ export class VodService {
         }
       }
     } catch (error) {
-      console.error(`[VOD] Error handling recording end:`, error);
+      Logger.log(LogLevel.ERROR, `[VOD] Error handling recording end:`, error);
     }
   }
 
   async startRecording(streamPath: string, inputUrl: string): Promise<string | null> {
     if (this.isShuttingDown) {
-      console.log(`[VOD] Cannot start recording during shutdown`);
+      Logger.log(LogLevel.INFO, `[VOD] Cannot start recording during shutdown`);
       return null;
     }
 
@@ -224,7 +224,7 @@ export class VodService {
             '-movflags', '+faststart+write_colr'
           ])
           .on('start', (commandLine) => {
-            console.log(`[VOD] MP4 Recording started: ${commandLine}`);
+            Logger.log(LogLevel.INFO, `[VOD] MP4 Recording started: ${commandLine}`);
           })
           .output(mp4Path);
 
@@ -238,12 +238,12 @@ export class VodService {
 
         mp4Process
           .on('error', (err, stdout, stderr) => {
-            console.error(`[VOD] MP4 Recording error:`, err);
-            console.error(`[VOD] FFmpeg stderr:`, stderr);
+            Logger.log(LogLevel.ERROR, `[VOD] MP4 Recording error:`, err);
+            Logger.log(LogLevel.ERROR, `[VOD] FFmpeg stderr:`, stderr);
             this.handleFfmpegError(err, mp4Info);
           })
           .on('end', () => {
-            console.log(`[VOD] MP4 Recording completed successfully`);
+            Logger.log(LogLevel.INFO, `[VOD] MP4 Recording completed successfully`);
             this.handleFfmpegEnd(mp4Info);
           });
 
@@ -279,7 +279,7 @@ export class VodService {
             '-max_muxing_queue_size', '1024'
           ])
           .on('start', (commandLine) => {
-            console.log(`[VOD] HLS Recording started: ${commandLine}`);
+            Logger.log(LogLevel.INFO, `[VOD] HLS Recording started: ${commandLine}`);
           })
           .output(path.join(hlsDir, 'playlist.m3u8'));
 
@@ -293,12 +293,12 @@ export class VodService {
 
         hlsProcess
           .on('error', (err, stdout, stderr) => {
-            console.error(`[VOD] HLS Recording error:`, err);
-            console.error(`[VOD] FFmpeg stderr:`, stderr);
+            Logger.log(LogLevel.ERROR, `[VOD] HLS Recording error:`, err);
+            Logger.log(LogLevel.ERROR, `[VOD] FFmpeg stderr:`, stderr);
             this.handleFfmpegError(err, hlsInfo);
           })
           .on('end', () => {
-            console.log(`[VOD] HLS Recording completed successfully`);
+            Logger.log(LogLevel.INFO, `[VOD] HLS Recording completed successfully`);
             this.handleFfmpegEnd(hlsInfo);
           });
 
@@ -312,7 +312,7 @@ export class VodService {
       return recordingId;
 
     } catch (error) {
-      console.error(`[VOD] Failed to start recording:`, error);
+      Logger.log(LogLevel.ERROR, `[VOD] Failed to start recording:`, error);
       return null;
     }
   }
@@ -323,7 +323,7 @@ export class VodService {
 
     const stopPromises = activeStreams.map(async ([key, info]) => {
       try {
-        console.log(`[VOD] Stopping recording ${key}`);
+        Logger.log(LogLevel.INFO, `[VOD] Stopping recording ${key}`);
 
         await new Promise<void>((resolve, reject) => {
           // Longer timeout to ensure proper file closure
@@ -332,23 +332,23 @@ export class VodService {
             try {
               info.command.kill('SIGKILL');
             } catch (killError) {
-              console.error(`Error killing stream ${key}:`, killError);
+              Logger.log(LogLevel.ERROR, `Error killing stream ${key}:`, killError);
             }
             resolve();
           }, 30000); // 30-second timeout
 
           // Normal end handler
           info.command.on('end', () => {
-            console.log(`[VOD] Recording ${key} stopped normally`);
+            Logger.log(LogLevel.INFO, `[VOD] Recording ${key} stopped normally`);
             clearTimeout(stopTimeout);
             resolve();
           });
 
           // Error handler with more detailed logging
           info.command.on('error', (err, stdout, stderr) => {
-            console.error(`[VOD] Error stopping recording ${key}:`, err);
-            console.error(`[VOD] FFmpeg stdout:`, stdout);
-            console.error(`[VOD] FFmpeg stderr:`, stderr);
+            Logger.log(LogLevel.ERROR, `[VOD] Error stopping recording ${key}:`, err);
+            Logger.log(LogLevel.ERROR, `[VOD] FFmpeg stdout:`, stdout);
+            Logger.log(LogLevel.ERROR, `[VOD] FFmpeg stderr:`, stderr);
 
             clearTimeout(stopTimeout);
 
@@ -370,7 +370,7 @@ export class VodService {
         // Remove from active streams
         this.vodStreams.delete(key);
       } catch (error) {
-        console.error(`[VOD] Error stopping recording ${key}:`, error);
+        Logger.log(LogLevel.ERROR, `[VOD] Error stopping recording ${key}:`, error);
       }
     });
 
@@ -415,7 +415,7 @@ export class VodService {
 
     const stopPromises = Array.from(this.vodStreams.entries()).map(async ([key, info]) => {
       try {
-        console.log(`[VOD] Stopping recording ${key}`);
+        Logger.log(LogLevel.INFO, `[VOD] Stopping recording ${key}`);
 
         // Graceful stop with timeout
         await new Promise<void>((resolve) => {
@@ -435,7 +435,7 @@ export class VodService {
           info.command.on('error', (err) => {
             clearTimeout(stopTimeout);
             if (err.message !== 'Output stream closed') {
-              console.error(`[VOD] Error stopping recording ${key}:`, err);
+              Logger.log(LogLevel.ERROR, `[VOD] Error stopping recording ${key}:`, err);
             }
             resolve();
           });
@@ -454,7 +454,7 @@ export class VodService {
         const streamPath = key.split('-')[0];
         this.isStreaming.delete(streamPath);
       } catch (error) {
-        console.error(`[VOD] Error stopping recording ${key}:`, error);
+        Logger.log(LogLevel.ERROR, `[VOD] Error stopping recording ${key}:`, error);
       }
     });
 
@@ -464,12 +464,12 @@ export class VodService {
 
   async shutdown(): Promise<void> {
     if (this.isShuttingDown) {
-      console.log('[VOD] Shutdown already in progress');
+      Logger.log(LogLevel.INFO, '[VOD] Shutdown already in progress');
       return;
     }
 
     this.isShuttingDown = true;
-    console.log('[VOD] Starting shutdown...');
+    Logger.log(LogLevel.INFO, '[VOD] Starting shutdown...');
 
     try {
       // Stop all recordings gracefully
@@ -490,7 +490,7 @@ export class VodService {
               }
             }
           } catch (uploadError) {
-            console.error(`[VOD] CDN upload cleanup error for ${recordingId}:`, uploadError);
+            Logger.log(LogLevel.ERROR, `[VOD] CDN upload cleanup error for ${recordingId}:`, uploadError);
           }
         });
 
@@ -500,10 +500,10 @@ export class VodService {
       // Destroy CDN service
       this.cdnService.destroy();
     } catch (error) {
-      console.error('[VOD] Shutdown error:', error);
+      Logger.log(LogLevel.ERROR, '[VOD] Shutdown error:', error);
     } finally {
       this.isShuttingDown = false;
-      console.log('[VOD] Shutdown complete');
+      Logger.log(LogLevel.INFO, '[VOD] Shutdown complete');
     }
   }
 
@@ -542,13 +542,13 @@ export class VodService {
               }
             }
           } catch (error) {
-            console.error(`[VOD] Error cleaning up recording:`, error);
+            Logger.log(LogLevel.ERROR, `[VOD] Error cleaning up recording:`, error);
           }
         }
         this.updateRecordingsIndex(streamDir);
       }
     } catch (error) {
-      console.error('[VOD] Error during cleanup:', error);
+      Logger.log(LogLevel.ERROR, '[VOD] Error during cleanup:', error);
     }
   }
 
@@ -593,7 +593,7 @@ export class VodService {
         recordings: sanitizeRecordingsIndex(recordings)
       }, null, 2));
     } catch (error) {
-      console.error(`[VOD] Error updating index:`, error);
+      Logger.log(LogLevel.ERROR, `[VOD] Error updating index:`, error);
     }
   }
 
@@ -603,7 +603,7 @@ export class VodService {
       if (!fs.existsSync(metadataPath)) return null;
       return JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
     } catch (error) {
-      console.error(`[VOD] Error getting recording info:`, error);
+      Logger.log(LogLevel.ERROR, `[VOD] Error getting recording info:`, error);
       return null;
     }
   }
@@ -641,7 +641,7 @@ export class VodService {
   }
 
   async detectUnsignedRecordings(streamName: string): Promise<void> {
-    console.log(`[VOD] Starting unsigned recordings detection for: ${streamName}`);
+    Logger.log(LogLevel.INFO, `[VOD] Starting unsigned recordings detection for: ${streamName}`);
 
     try {
       // Always use temp directory for detection
@@ -649,7 +649,7 @@ export class VodService {
 
       // Ensure stream directory exists
       if (!fs.existsSync(streamDir)) {
-        console.log(`[VOD] Stream directory does not exist: ${streamDir}`);
+        Logger.log(LogLevel.INFO, `[VOD] Stream directory does not exist: ${streamDir}`);
         return;
       }
 
@@ -660,8 +660,8 @@ export class VodService {
       const mp4Files = files.filter(f => f.endsWith('.mp4'));
       const metadataFiles = files.filter(f => f.endsWith('.json') && f !== 'index.json');
 
-      console.log(`[VOD] MP4 Files found: ${mp4Files.join(', ')}`);
-      console.log(`[VOD] Metadata Files found: ${metadataFiles.join(', ')}`);
+      Logger.log(LogLevel.INFO, `[VOD] MP4 Files found: ${mp4Files.join(', ')}`);
+      Logger.log(LogLevel.INFO, `[VOD] Metadata Files found: ${metadataFiles.join(', ')}`);
 
       // Create a set of already signed MP4 files
       const signedMp4s = new Set(
@@ -674,13 +674,13 @@ export class VodService {
               .filter(f => f.type === 'mp4')
               .map(f => path.basename(f.path));
           } catch (err) {
-            console.error(`[VOD] Error reading metadata file ${file}:`, err);
+            Logger.log(LogLevel.ERROR, `[VOD] Error reading metadata file ${file}:`, err);
             return [];
           }
         })
       );
 
-      console.log(`[VOD] Already signed MP4s: ${Array.from(signedMp4s).join(', ')}`);
+      Logger.log(LogLevel.INFO, `[VOD] Already signed MP4s: ${Array.from(signedMp4s).join(', ')}`);
 
       // Process unsigned MP4 files
       for (const mp4File of mp4Files.filter(mp4 => !signedMp4s.has(mp4))) {
@@ -689,7 +689,7 @@ export class VodService {
           const stats = fs.statSync(mp4Path);
           const recordingId = mp4File.replace('.mp4', '');
 
-          console.log(`[VOD] Processing unsigned recording: ${mp4File}`);
+          Logger.log(LogLevel.INFO, `[VOD] Processing unsigned recording: ${mp4File}`);
 
           // Create metadata for unsigned recording
           const metadata: RecordingMetadata = {
@@ -710,13 +710,13 @@ export class VodService {
           const duration = await this.getVideoDuration(mp4Path);
           if (duration) {
             metadata.duration = duration;
-            console.log(`[VOD] Duration for ${mp4File}: ${duration} seconds`);
+            Logger.log(LogLevel.INFO, `[VOD] Duration for ${mp4File}: ${duration} seconds`);
           }
 
           // Write metadata file
           const metadataPath = path.join(streamDir, `${recordingId}.json`);
           fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
-          console.log(`[VOD] Created metadata for unsigned recording: ${metadataPath}`);
+          Logger.log(LogLevel.INFO, `[VOD] Created metadata for unsigned recording: ${metadataPath}`);
 
           // Handle CDN upload if enabled
           if (this.cdnService.isEnabled()) {
@@ -726,22 +726,22 @@ export class VodService {
             if (uploadId) {
               const uploadStatus = await this.getCDNUploadStatus(recordingId);
               if (uploadStatus.completed) {
-                console.log(`[VOD] CDN upload completed for ${recordingId}, cleaning up temp files`);
+                Logger.log(LogLevel.INFO, `[VOD] CDN upload completed for ${recordingId}, cleaning up temp files`);
                 this.cleanupTempFiles(recordingId, streamName);
               }
             }
           }
         } catch (error) {
-          console.error(`[VOD] Error processing unsigned recording ${mp4File}:`, error);
+          Logger.log(LogLevel.ERROR, `[VOD] Error processing unsigned recording ${mp4File}:`, error);
         }
       }
 
       // Always update recordings index
       this.updateRecordingsIndex(streamName);
-      console.log(`[VOD] Completed unsigned recording detection for ${streamName}`);
+      Logger.log(LogLevel.INFO, `[VOD] Completed unsigned recording detection for ${streamName}`);
 
     } catch (error) {
-      console.error(`[VOD] Error detecting unsigned recordings:`, error);
+      Logger.log(LogLevel.ERROR, `[VOD] Error detecting unsigned recordings:`, error);
     }
   }
 
@@ -774,7 +774,7 @@ export class VodService {
 
       return uploadId;
     } catch (error) {
-      console.error(`[VOD] CDN upload failed:`, error);
+      Logger.log(LogLevel.ERROR, `[VOD] CDN upload failed:`, error);
       return null;
     }
   }
@@ -814,9 +814,9 @@ export class VodService {
         fs.rmdirSync(basePath);
       }
 
-      console.log(`[VOD] Cleaned up temp files for recording: ${recordingId}`);
+      Logger.log(LogLevel.INFO, `[VOD] Cleaned up temp files for recording: ${recordingId}`);
     } catch (error) {
-      console.error(`[VOD] Error cleaning up temp files:`, error);
+      Logger.log(LogLevel.ERROR, `[VOD] Error cleaning up temp files:`, error);
     }
   }
 }

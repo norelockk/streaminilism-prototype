@@ -5,6 +5,7 @@ import { WebSocket } from 'ws';
 import { EventEmitter } from 'events';
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 import { CDNConfig } from '../types';
+import { Logger, LogLevel } from '../utils';
 
 interface UploadTask {
   id: string;
@@ -62,7 +63,7 @@ export class CDNUploadService extends EventEmitter {
     this.wsPort = Math.floor(Math.random() * 10000) + 10000;
     this.binaryPath = path.join(process.cwd(), 'src', 'go', CDNUploadService.BINARY_NAME);
     this.initPromise = this.initialize().catch(err => {
-      console.log('[CDN Upload Service] Initialization failed:', err);
+      Logger.log(LogLevel.ERROR, 'Initialization failed:', err);
       throw err;
     });
   }
@@ -73,7 +74,7 @@ export class CDNUploadService extends EventEmitter {
       await new Promise(resolve => setTimeout(resolve, 1000));
       await this.connectWebSocket();
     } catch (error) {
-      console.log('[CDN Upload Service] Failed to initialize:', error);
+      Logger.log(LogLevel.ERROR, 'Failed to initialize:', error);
       throw error;
     }
   }
@@ -94,7 +95,7 @@ export class CDNUploadService extends EventEmitter {
           '--verbose'
         ];
 
-        console.log('[CDN Upload Service] Starting binary with args:', args.join(' '));
+        Logger.log(LogLevel.DEBUG, 'Starting binary with args:', args.join(' '));
 
         this.goProcess = spawn(this.binaryPath, args, {
           cwd: path.join(process.cwd(), 'src', 'go')
@@ -107,13 +108,13 @@ export class CDNUploadService extends EventEmitter {
         // Changed to listen on stdout instead of stderr
         const startupHandler = (data: Buffer) => {
           const message = data.toString().trim();
-          console.log(`[CDN Upload Service] STDOUT: ${message}`);
+          Logger.log(LogLevel.DEBUG, `STDOUT: ${message}`);
 
           if (message.includes('WebSocket server listening')) {
             started = true;
 
             resolveTimer = setTimeout(() => {
-              console.log('[CDN Upload Service] Binary started successfully');
+              Logger.log(LogLevel.INFO, 'Binary started successfully');
               resolve();
             }, 500);
           }
@@ -124,7 +125,7 @@ export class CDNUploadService extends EventEmitter {
         // Keep stderr handler for actual errors
         this.goProcess.stderr.on('data', (data) => {
           errorOutput += data.toString();
-          console.log(`[CDN Upload Service] Error Output: ${data.toString().trim()}`);
+          Logger.log(LogLevel.ERROR, `Error Output: ${data.toString().trim()}`);
         });
 
         this.goProcess.on('error', (error) => {
@@ -178,12 +179,12 @@ export class CDNUploadService extends EventEmitter {
       let errorOutput = '';
 
       goProcess.stdout.on('data', (data) => {
-        console.log(`[CDN Upload Service] ${data.toString().trim()}`);
+        Logger.log(LogLevel.DEBUG, `${data.toString().trim()}`);
       });
 
       goProcess.stderr.on('data', (data) => {
         errorOutput += data.toString();
-        console.log(`[CDN Upload Service Error] ${data.toString().trim()}`);
+        Logger.log(LogLevel.ERROR, `${data.toString().trim()}`);
       });
 
       goProcess.on('error', (error) => {
@@ -208,7 +209,7 @@ export class CDNUploadService extends EventEmitter {
         this.wsClient = new WebSocket(`ws://localhost:${this.wsPort}/ws`);
 
         this.wsClient.onopen = () => {
-          console.log('[CDN Upload Service] WebSocket connected');
+          Logger.log(LogLevel.INFO, 'WebSocket connected');
           resolve();
         };
 
@@ -217,19 +218,19 @@ export class CDNUploadService extends EventEmitter {
             const message = JSON.parse(event.data.toString());
             this.handleWebSocketMessage(message);
           } catch (error) {
-            console.log('[CDN Upload Service] Error handling message:', error);
+            Logger.log(LogLevel.ERROR, 'Error handling message:', error);
           }
         };
 
         this.wsClient.onclose = () => {
           if (!this.isShuttingDown) {
-            console.log('[CDN Upload Service] WebSocket disconnected, reconnecting...');
+            Logger.log(LogLevel.WARN, 'WebSocket disconnected, reconnecting...');
             setTimeout(() => this.connectWebSocket(), 5000);
           }
         };
 
         this.wsClient.onerror = (error) => {
-          console.log('[CDN Upload Service] WebSocket error:', error);
+          Logger.log(LogLevel.ERROR, 'WebSocket error:', error);
           reject(error);
         };
 
@@ -364,7 +365,7 @@ export class CDNUploadService extends EventEmitter {
       try {
         await fs.promises.unlink(tempFile);
       } catch (error) {
-        console.log('[CDN Upload Service] Failed to cleanup temp file:', error);
+        console.log('Failed to cleanup temp file:', error);
       }
     }
   }

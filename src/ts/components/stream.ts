@@ -2,10 +2,11 @@ import NodeMediaServer from 'node-media-server';
 import express, { Request, Response, NextFunction } from 'express';
 import { Server } from 'http';
 import { EventEmitter } from 'events';
-import { ConfigService } from './services/config';
-import { VodService } from './services/vod';
-import { StreamService } from './services/stream';
-import { VodApi } from './api/vod';
+import { ConfigService } from '../services/config';
+import { VodService } from '../services/vod';
+import { StreamService } from '../services/stream';
+import { VodApi } from '../api/vod';
+import { Logger, LogLevel } from '../utils';
 
 export interface StreamerEvents {
   'stream:ready': (id: string, streamPath: string) => void;
@@ -77,7 +78,7 @@ export class MultiPlatformStreamer extends EventEmitter {
         if (sessionId) {
           const session = this.nms.getSession(sessionId);
           if (!session) {
-            console.warn(`[Health Check] Lost session for stream ${streamPath}`);
+            Logger.log(LogLevel.WARN, `Lost session for stream ${streamPath}`);
             this.handleStreamDisconnect(sessionId, streamPath);
           }
         }
@@ -87,13 +88,13 @@ export class MultiPlatformStreamer extends EventEmitter {
       const activeRecordings = this.vodService.getActiveRecordings();
       for (const recording of activeRecordings) {
         if (!this.activeStreams.has(recording.streamName)) {
-          console.warn(`[Health Check] Found orphaned recording for ${recording.streamName}`);
+          Logger.log(LogLevel.WARN, `Found orphaned recording for ${recording.streamName}`);
           this.vodService.stopRecording(recording.streamName);
         }
       }
 
     } catch (error) {
-      console.error('[Health Check] Error during health check:', error);
+      Logger.log(LogLevel.ERROR, 'Error during health check:', error);
     }
   }
 
@@ -102,9 +103,9 @@ export class MultiPlatformStreamer extends EventEmitter {
     
     // @ts-ignore - Update server config if needed
     if (JSON.stringify(this.nms.config) !== JSON.stringify(newConfig.server)) {
-      console.log('[Config] Server configuration changed, restart required');
+      Logger.log(LogLevel.INFO, 'Server configuration changed, restart required');
       this.restart().catch(err => {
-        console.error('[Config] Failed to restart server:', err);
+        Logger.log(LogLevel.ERROR, 'Failed to restart server:', err);
       });
     }
   }
@@ -122,25 +123,25 @@ export class MultiPlatformStreamer extends EventEmitter {
   }
 
   private handlePreConnect(id: string, args: any): void {
-    console.log(`[Connection] New connection attempt: ${id}`);
+    Logger.log(LogLevel.INFO, `New connection attempt: ${id}`);
   }
 
   private handlePostConnect(id: string, args: any): void {
-    console.log(`[Connection] Client connected: ${id}`);
+    Logger.log(LogLevel.DEBUG, `Client connected: ${id}`);
   }
 
   private async handlePrePublish(id: string, StreamPath: string): Promise<void> {
-    console.log(`[Streaming] New stream preparing: ${StreamPath}`);
+    Logger.log(LogLevel.DEBUG, `New stream preparing: ${StreamPath}`);
     
     if (this.isShuttingDown) {
-      console.log(`[Streaming] Server is shutting down, rejecting stream: ${StreamPath}`);
+      Logger.log(LogLevel.WARN, `Server is shutting down, rejecting stream: ${StreamPath}`);
       this.rejectStream(id);
       return;
     }
 
     // Check if stream is already active
     if (this.activeStreams.has(StreamPath)) {
-      console.log(`[Streaming] Stream ${StreamPath} is already active, rejecting new stream`);
+      Logger.log(LogLevel.WARN, `Stream ${StreamPath} is already active, rejecting new stream`);
       this.rejectStream(id);
       return;
     }
@@ -160,7 +161,7 @@ export class MultiPlatformStreamer extends EventEmitter {
       
       // Mark stream as active
       this.activeStreams.add(StreamPath);
-      console.log(`[Streaming] New stream started: ${StreamPath}`);
+      Logger.log(LogLevel.INFO, `New stream started: ${StreamPath}`);
       
       const config = this.configService.getConfig();
       const inputUrl = `rtmp://localhost:${config.server.rtmp.port}${StreamPath}`;
@@ -180,7 +181,7 @@ export class MultiPlatformStreamer extends EventEmitter {
           Object.entries(config.platforms).forEach(([platform, platformConfig]) => {
             this.streamService.startPlatformStream(platform, platformConfig, inputUrl, StreamPath)
               .catch(error => {
-                console.error(`[Stream Error] Failed to start ${platform} stream:`, error);
+                Logger.log(LogLevel.ERROR, `Failed to start ${platform} stream:`, error);
                 this.emit('stream:error', id, StreamPath, error);
               });
           });
@@ -191,7 +192,7 @@ export class MultiPlatformStreamer extends EventEmitter {
       this.emit('stream:started', id, StreamPath);
 
     } catch (error) {
-      console.error('[Stream Error]:', error);
+      Logger.log(LogLevel.ERROR, '[Stream Error]:', error);
       this.activeStreams.delete(StreamPath);
       this.streamSessions.delete(StreamPath);
       this.rejectStream(id);
@@ -200,7 +201,7 @@ export class MultiPlatformStreamer extends EventEmitter {
   }
 
   private async handleDonePublish(id: string, StreamPath: string): Promise<void> {
-    console.log(`[Streaming] Stream ended: ${StreamPath}`);
+    Logger.log(LogLevel.INFO, `Stream ended: ${StreamPath}`);
 
     // Stop all platform streams
     this.streamService.stopAllStreams(StreamPath);
@@ -228,19 +229,19 @@ export class MultiPlatformStreamer extends EventEmitter {
   }
 
   private handlePrePlay(id: string, StreamPath: string): void {
-    console.log(`[Playback] New viewer preparing: ${StreamPath}`);
+    Logger.log(LogLevel.DEBUG, `New viewer preparing: ${StreamPath}`);
   }
 
   private handlePostPlay(id: string, StreamPath: string): void {
-    console.log(`[Playback] New viewer started: ${StreamPath}`);
+    Logger.log(LogLevel.DEBUG, `New viewer started: ${StreamPath}`);
   }
 
   private handleDonePlay(id: string, StreamPath: string): void {
-    console.log(`[Playback] Viewer disconnected: ${StreamPath}`);
+    Logger.log(LogLevel.DEBUG, `Viewer disconnected: ${StreamPath}`);
   }
 
   private handleStreamDisconnect(id: string, StreamPath: string): void {
-    console.log(`[Streaming] Stream disconnected: ${StreamPath}`);
+    Logger.log(LogLevel.INFO, `Stream disconnected: ${StreamPath}`);
     this.handleDonePublish(id, StreamPath);
   }
 
@@ -260,27 +261,27 @@ export class MultiPlatformStreamer extends EventEmitter {
       // Check if Node Media Server HTTP server is available
       const nmsAny = this.nms as any;
       if (nmsAny.nhs?.app) {
-        console.log('[VOD] Using Node Media Server HTTP for VOD API');
+        Logger.log(LogLevel.DEBUG, 'Using Node Media Server HTTP for VOD API');
         const { app } = nmsAny.nhs;
 
         this.setupApiMiddleware(app);
-        console.log('[VOD] VOD API endpoints initialized on Node Media Server HTTP');
+        Logger.log(LogLevel.DEBUG, 'VOD API endpoints initialized on Node Media Server HTTP');
       } else {
         // Create standalone server if NMS HTTP is not available
-        console.log('[VOD] Creating standalone VOD API server');
+        Logger.log(LogLevel.DEBUG, 'Creating standalone VOD API server');
         const app = express();
         const port = config.server.http.port + 1;
 
         this.setupApiMiddleware(app);
 
         const server = app.listen(port, () => {
-          console.log(`[VOD] Standalone VOD API server running on port ${port}`);
+          Logger.log(LogLevel.INFO, `Standalone VOD API server running on port ${port}`);
         });
 
         server.on('error', (error: NodeJS.ErrnoException) => {
-          console.error('[VOD] API server error:', error);
+          Logger.log(LogLevel.ERROR, 'API server error:', error);
           if (error.code === 'EADDRINUSE') {
-            console.error(`[VOD] Port ${port} is already in use`);
+            Logger.log(LogLevel.ERROR, `Port ${port} is already in use`);
           }
           this.emit('server:error', error);
         });
@@ -288,7 +289,7 @@ export class MultiPlatformStreamer extends EventEmitter {
         this.vodApiApp = server;
       }
     } catch (error) {
-      console.error('[VOD] Failed to setup API server:', error);
+      Logger.log(LogLevel.ERROR, 'Failed to setup API server:', error);
       this.emit('server:error', error as Error);
       throw error;
     }
@@ -314,13 +315,13 @@ export class MultiPlatformStreamer extends EventEmitter {
 
     // Error handling middleware
     app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-      console.error('[VOD API Error]:', err);
+      Logger.log(LogLevel.ERROR, err);
       res.status(500).json({ error: 'Internal server error' });
     });
   }
 
   public async restart(): Promise<void> {
-    console.log('[Server] Restarting...');
+    Logger.log(LogLevel.INFO, 'Restarting...');
     await this.shutdown();
     await new Promise(resolve => setTimeout(resolve, 1000));
     this.start();
@@ -333,10 +334,10 @@ export class MultiPlatformStreamer extends EventEmitter {
 
     this.nms.run();
     this.startupTime = new Date();
-    console.log('[Streaming] Server started');
+    Logger.log(LogLevel.INFO, 'Server started');
 
     const config = this.configService.getConfig();
-    console.log(`[VOD] VOD system initialized: MP4=${config.vod.recordingFormats.mp4}, HLS=${config.vod.recordingFormats.hls}`);
+    Logger.log(LogLevel.INFO, `VOD system initialized: MP4=${config.vod.recordingFormats.mp4}, HLS=${config.vod.recordingFormats.hls}`);
 
     if (config.server.http?.port) {
       this.setupVodApi();
@@ -347,12 +348,12 @@ export class MultiPlatformStreamer extends EventEmitter {
 
   public async shutdown(): Promise<void> {
     if (this.isShuttingDown) {
-      console.log('Shutdown already in progress...');
+      Logger.log(LogLevel.WARN, 'Shutdown already in progress...');
       return;
     }
 
     this.isShuttingDown = true;
-    console.log('Shutting down...');
+    Logger.log(LogLevel.INFO, 'Shutting down...');
 
     const shutdownPromises: Promise<void>[] = [];
 
@@ -380,7 +381,7 @@ export class MultiPlatformStreamer extends EventEmitter {
       shutdownPromises.push(
         new Promise((resolve) => {
           this.vodApiApp?.close(() => {
-            console.log('[VOD] Standalone VOD API server closed');
+            Logger.log(LogLevel.INFO, 'Standalone VOD API server closed');
             resolve();
           });
         })
@@ -400,12 +401,12 @@ export class MultiPlatformStreamer extends EventEmitter {
         await new Promise<void>((resolve) => {
           // @ts-ignore - stop method exists but is not in types
           this.nms.stop(() => {
-            console.log('[Server] Node Media Server stopped');
+            Logger.log(LogLevel.INFO, 'Node Media Server stopped');
             resolve();
           });
         });
       } catch (error) {
-        console.error('[Server] Error stopping Node Media Server:', error);
+        Logger.log(LogLevel.ERROR, 'Error stopping Node Media Server:', error);
       }
     }
 
@@ -479,7 +480,7 @@ export class MultiPlatformStreamer extends EventEmitter {
       }
       return false;
     } catch (error) {
-      console.error(`[Stream] Error forcing disconnect for ${streamPath}:`, error);
+      Logger.log(LogLevel.ERROR, `[Stream] Error forcing disconnect for ${streamPath}:`, error);
       return false;
     }
   }

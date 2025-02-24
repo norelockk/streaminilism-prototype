@@ -1,5 +1,7 @@
 vod
+lib
 dist
+logs
 node_modules
 config-backups
 streaming-config.json

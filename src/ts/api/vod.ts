@@ -4,6 +4,7 @@ import express, { Router, Request, Response } from 'express';
 import { VodConfig, RecordingMetadata, StreamIndex, MasterIndex } from '../types';
 import { ConfigService } from '../services/config';
 import { VOD_DIR } from '../../constants';
+import { Logger, LogLevel } from '../utils';
 
 export class VodApi {
   private router: Router;
@@ -24,18 +25,6 @@ export class VodApi {
   private setupRoutes(): void {
     this.router.get('/recordings', this.listRecordings.bind(this));
     this.router.get('/recordings/:streamName', this.getStreamRecordings.bind(this));
-  }
-
-  private transformRecordingUrls(recording: RecordingMetadata): RecordingMetadata {
-    const transformed = { ...recording };
-    transformed.formats = recording.formats.map(format => {
-      return {
-        ...format,
-        webPath: this.cdnConfig.enabled && format.cdnUrl ? format.cdnUrl : format.webPath
-      };
-    });
-
-    return transformed;
   }
 
   private createMasterIndex(): MasterIndex {
@@ -65,7 +54,7 @@ export class VodApi {
                   : `/recordings/${dir}`
               });
             } catch (err) {
-              console.error(`[VOD API] Error reading stream index for ${dir}:`, err);
+              Logger.log(LogLevel.ERROR, `Error parsing index for stream ${dir}:`, err);
             }
           }
         }
@@ -82,7 +71,7 @@ export class VodApi {
         streams
       };
     } catch (error) {
-      console.error('[VOD API] Error creating master index:', error);
+      Logger.log(LogLevel.ERROR, 'Error creating master index:', error);
       return {
         lastUpdated: new Date().toISOString(),
         streams: []
@@ -93,7 +82,7 @@ export class VodApi {
   private listRecordings(req: Request, res: Response): void {
     try {
       if (!fs.existsSync(this.basePath)) {
-        console.log(`[VOD API] Base path does not exist: ${this.basePath}`);
+        Logger.log(LogLevel.WARN, `Base path does not exist: ${this.basePath}`);
         res.json({ 
           lastUpdated: new Date().toISOString(),
           streams: [] 
@@ -111,7 +100,7 @@ export class VodApi {
         });
       }
     } catch (error) {
-      console.error('[VOD API] Error listing recordings:', error);
+      Logger.log(LogLevel.ERROR, 'Error listing recordings:', error);
       res.status(500).json({ error: 'Failed to retrieve recordings' });
     }
   }
@@ -140,7 +129,7 @@ export class VodApi {
         res.status(404).json({ error: 'Stream not found' });
       }
     } catch (error) {
-      console.error('[VOD API] Error getting stream recordings:', error);
+      Logger.log(LogLevel.ERROR, 'Error getting stream recordings:', error);
       res.status(500).json({ error: 'Failed to retrieve stream recordings' });
     }
   }

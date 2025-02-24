@@ -1,4 +1,4 @@
-import { MultiPlatformStreamer } from './ts/stream';
+import { MultiPlatformStreamer } from './ts/components/stream';
 
 // Create and start the streamer
 const streamer = new MultiPlatformStreamer();

@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { EventEmitter } from 'events';
 import { AppConfig, ServerConfig, VodConfig, PlatformConfig, CDNConfig } from '../types';
-import { defaultConfig } from '../utils';
+import { defaultConfig, Logger, LogLevel } from '../utils';
 
 interface ConfigEvents {
   'configUpdated': (config: AppConfig) => void;
@@ -50,16 +50,16 @@ export class ConfigService extends EventEmitter {
       }
       return this.createDefaultConfig();
     } catch (error) {
-      console.error('[Config] Error loading configuration:', error);
+      Logger.log(LogLevel.ERROR, 'Error loading configuration:', error);
       
       // Try to load from backup if main config fails
       const backup = this.loadLatestBackup();
       if (backup) {
-        console.log('[Config] Loaded configuration from backup');
+        Logger.log(LogLevel.INFO, 'Loaded configuration from backup');
         return backup;
       }
 
-      console.error('[Config] No valid configuration found, using default');
+      Logger.log(LogLevel.ERROR, 'No valid configuration found, using default');
       return this.createDefaultConfig();
     }
   }
@@ -84,7 +84,7 @@ export class ConfigService extends EventEmitter {
         }
       }
     } catch (error) {
-      console.error('[Config] Error loading backup:', error);
+      Logger.log(LogLevel.ERROR, 'Error loading backup:', error);
     }
     return null;
   }
@@ -165,7 +165,7 @@ export class ConfigService extends EventEmitter {
       fs.writeFileSync(ConfigService.CONFIG_PATH, JSON.stringify(config, null, 2));
       return config;
     } catch (error) {
-      console.error('[Config] Error creating default configuration:', error);
+      Logger.log(LogLevel.ERROR, 'Error creating default configuration:', error);
       throw error;
     }
   }
@@ -184,7 +184,7 @@ export class ConfigService extends EventEmitter {
       // Clean up old backups
       this.cleanupOldBackups();
     } catch (error) {
-      console.error('[Config] Error creating backup:', error);
+      Logger.log(LogLevel.ERROR, 'Error creating backup:', error);
     }
   }
 
@@ -201,7 +201,7 @@ export class ConfigService extends EventEmitter {
         });
       }
     } catch (error) {
-      console.error('[Config] Error cleaning up backups:', error);
+      Logger.log(LogLevel.ERROR, 'Error cleaning up backups:', error);
     }
   }
 
@@ -218,7 +218,7 @@ export class ConfigService extends EventEmitter {
 
     this.isReloading = true;
     try {
-      console.log('[Config] Configuration file changed, reloading...');
+      Logger.log(LogLevel.INFO, 'Configuration file changed, reloading...');
       
       // Create backup before loading new config
       this.createBackup();
@@ -228,16 +228,16 @@ export class ConfigService extends EventEmitter {
       this.lastValidConfig = { ...newConfig };
       this.configVersion++;
 
-      console.log('[Config] Configuration reloaded successfully');
+      Logger.log(LogLevel.INFO, 'Configuration reloaded successfully');
       this.emit('configUpdated', this.config);
     } catch (error) {
-      console.error('[Config] Error reloading configuration:', error);
+      Logger.log(LogLevel.ERROR, 'Error reloading configuration:', error);
       this.emit('configError', error as Error);
       
       // Rollback to last valid config
       this.config = { ...this.lastValidConfig };
       fs.writeFileSync(ConfigService.CONFIG_PATH, JSON.stringify(this.config, null, 2));
-      console.log('[Config] Rolled back to last valid configuration');
+      console.log('Rolled back to last valid configuration');
     } finally {
       this.isReloading = false;
     }
@@ -330,7 +330,7 @@ export class ConfigService extends EventEmitter {
         return true;
       }
     } catch (error) {
-      console.error('[Config] Error restoring backup:', error);
+      Logger.log(LogLevel.ERROR, 'Error restoring backup:', error);
     }
     return false;
   }

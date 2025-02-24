@@ -1,5 +1,5 @@
 import { CDNConfig } from '../types';
-import { humanReadable } from '../utils';
+import { humanReadable, Logger, LogLevel } from '../utils';
 import { CDNUploadService } from './cdn-upload';
 
 export class CDNService {
@@ -24,38 +24,38 @@ export class CDNService {
   private initializeUploadService(): void {
     if (!this.config.enabled) return;
 
-    console.log('[CDN] Initializing upload service...');
+    Logger.log(LogLevel.INFO, 'Initializing upload service...');
 
     try {
       this.uploadService = new CDNUploadService(this.config);
 
       // Log upload events
       this.uploadService.on('taskQueued', ({ uploadId, fileName }) => {
-        console.log(`[CDN] Upload queued: ${fileName} (${uploadId})`);
+        Logger.log(LogLevel.INFO, `Upload queued: ${fileName} (${uploadId})`);
       });
 
       this.uploadService.on('uploadStarted', ({ uploadId, fileName }) => {
-        console.log(`[CDN] Upload started: ${fileName} (${uploadId})`);
+        Logger.log(LogLevel.INFO, `Upload started: ${fileName} (${uploadId})`);
       });
 
       this.uploadService.on('uploadProgress', ({ uploadId, fileName, progress, speed }) => {
-        console.log(`[CDN] Upload progress: ${fileName} (${uploadId}) - ${Math.floor(progress)}% @ ${humanReadable(speed)}`);
+        Logger.log(LogLevel.INFO, `Upload progress: ${fileName} (${uploadId}) - ${Math.floor(progress)}% @ ${humanReadable(speed)}`);
       });
 
       this.uploadService.on('uploadCompleted', ({ uploadId, fileName }) => {
-        console.log(`[CDN] Upload completed: ${fileName} (${uploadId})`);
+        Logger.log(LogLevel.INFO, `Upload completed: ${fileName} (${uploadId})`);
       });
 
       this.uploadService.on('uploadFailed', ({ uploadId, fileName, error }) => {
-        console.error(`[CDN] Upload failed: ${fileName} (${uploadId})`, error);
+        Logger.log(LogLevel.ERROR, `Upload failed: ${fileName} (${uploadId})`, error);
       });
 
       this.uploadService.on('uploadRetrying', ({ uploadId, fileName, attempt }) => {
-        console.log(`[CDN] Retrying upload: ${fileName} (${uploadId}), attempt ${attempt}`);
+        Logger.log(LogLevel.INFO, `Retrying upload: ${fileName} (${uploadId}), attempt ${attempt}`);
       });
 
     } catch (error) {
-      console.error('[CDN] Failed to initialize upload service:', error);
+      Logger.log(LogLevel.ERROR, 'Failed to initialize upload service:', error);
       this.uploadService = null;
     }
   }
@@ -73,7 +73,7 @@ export class CDNService {
       );
       return uploadId;
     } catch (error) {
-      console.error('[CDN] Failed to queue recording upload:', error);
+      Logger.log(LogLevel.ERROR, 'Failed to queue recording upload:', error);
       return null;
     }
   }
@@ -91,7 +91,7 @@ export class CDNService {
       );
       return uploadId;
     } catch (error) {
-      console.error('[CDN] Failed to queue HLS upload:', error);
+      Logger.log(LogLevel.ERROR, 'Failed to queue HLS upload:', error);
       return null;
     }
   }
@@ -117,7 +117,7 @@ export class CDNService {
     }
 
     if (wasEnabled !== this.config.enabled) {
-      console.log(`[CDN] Service ${this.config.enabled ? 'enabled' : 'disabled'}`);
+      Logger.log(LogLevel.DEBUG, `Service ${this.config.enabled ? 'enabled' : 'disabled'}`);
     }
   }
 

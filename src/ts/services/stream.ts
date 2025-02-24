@@ -1,6 +1,7 @@
 import ffmpeg, { FfmpegCommand } from 'fluent-ffmpeg';
 import { PlatformConfig } from '../types';
 import { FFmpegService } from './ffmpeg';
+import { Logger, LogLevel } from '../utils';
 
 export class StreamService {
   private ffmpeg!: typeof ffmpeg;
@@ -32,13 +33,13 @@ export class StreamService {
       // Don't start if stream is being stopped
       const streamKey = `${streamPath}-${platform}`;
       if (this.stoppingStreams.has(streamKey)) {
-        console.log(`[${platform}] Stream ${streamPath} is being stopped, not starting`);
+        Logger.log(LogLevel.INFO, `[${platform}] Stream ${streamPath} is being stopped, not starting`);
         return null;
       }
 
       const retryCount = this.getRetryCount(streamPath, platform);
       if (retryCount >= this.maxRetries) {
-        console.log(`[${platform}] Max retry attempts reached for stream ${streamPath}`);
+        Logger.log(LogLevel.INFO, `[${platform}] Max retry attempts reached for stream ${streamPath}`);
         return null;
       }
 
@@ -59,7 +60,7 @@ export class StreamService {
       this.activeStreams.set(streamKey, stream);
       return stream;
     } catch (error) {
-      console.error(`[${platform}] Failed to initialize stream:`, error);
+      Logger.log(LogLevel.ERROR, `[${platform}] Failed to initialize stream:`, error);
       return null;
     }
   }
@@ -76,22 +77,22 @@ export class StreamService {
 
     stream
       .on('start', () => {
-        console.log(`[${platform}] Streaming started (${config.url}/${config.key}) (Attempt ${retryCount + 1}/${this.maxRetries})`);
+        Logger.log(LogLevel.INFO, `[${platform}] Streaming started (${config.url}/${config.key}) (Attempt ${retryCount + 1}/${this.maxRetries})`);
       })
       .on('error', (err, stdout, stderr) => {
-        console.error(`[${platform}] Stream error:`, err.message);
-        if (stderr) console.error(`[${platform}] FFmpeg stderr:`, stderr);
+        Logger.log(LogLevel.ERROR, `[${platform}] Stream error:`, err.message);
+        if (stderr) Logger.log(LogLevel.ERROR, `[${platform}] FFmpeg stderr:`, stderr);
 
         // Only handle error if stream isn't being intentionally stopped
         if (!this.stoppingStreams.has(streamKey)) {
           this.handleStreamError(platform, streamPath, config, inputUrl);
         } else {
-          console.log(`[${platform}] Stream was being stopped, ignoring error`);
+          Logger.log(LogLevel.INFO, `[${platform}] Stream was being stopped, ignoring error`);
           this.stoppingStreams.delete(streamKey);
         }
       })
       .on('end', () => {
-        console.log(`[${platform}] Stream ended normally`);
+        Logger.log(LogLevel.INFO, `[${platform}] Stream ended normally`);
         this.activeStreams.delete(streamKey);
         this.stoppingStreams.delete(streamKey);
       });
@@ -111,7 +112,7 @@ export class StreamService {
         oldStream?.kill('SIGINT');
         this.activeStreams.delete(streamKey);
       } catch (error) {
-        console.error(`[${platform}] Error killing stream:`, error);
+        Logger.log(LogLevel.ERROR, `[${platform}] Error killing stream:`, error);
       }
     }
 
@@ -124,7 +125,7 @@ export class StreamService {
         setTimeout(() => {
           // Double check stream isn't being stopped before retrying
           if (!this.stoppingStreams.has(streamKey)) {
-            console.log(`[${platform}] Attempting to restart stream...`);
+            Logger.log(LogLevel.INFO, `[${platform}] Attempting to restart stream...`);
             this.startPlatformStream(platform, config, inputUrl, streamPath);
           }
         }, 5000);
@@ -151,13 +152,13 @@ export class StreamService {
       if (streamKey.startsWith(`${streamPath}-`)) {
         try {
           const platform = streamKey.split('-')[1];
-          console.log(`[${platform}] Killing stream for ${streamPath}`);
+          Logger.log(LogLevel.INFO, `[${platform}] Killing stream for ${streamPath}`);
           // Mark stream as being stopped
           this.stoppingStreams.add(streamKey);
           stream.kill('SIGINT');
           this.activeStreams.delete(streamKey);
         } catch (error) {
-          console.error(`Error killing stream ${streamKey}:`, error);
+          Logger.log(LogLevel.ERROR, `Error killing stream ${streamKey}:`, error);
           this.stoppingStreams.delete(streamKey);
         }
       }
@@ -171,12 +172,12 @@ export class StreamService {
 
     if (stream) {
       try {
-        console.log(`[${platform}] Killing stream for ${streamPath}`);
+        Logger.log(LogLevel.INFO, `[${platform}] Killing stream for ${streamPath}`);
         this.stoppingStreams.add(streamKey);
         stream.kill('SIGINT');
         this.activeStreams.delete(streamKey);
       } catch (error) {
-        console.error(`Error killing stream ${streamKey}:`, error);
+        Logger.log(LogLevel.ERROR, `Error killing stream ${streamKey}:`, error);
         this.stoppingStreams.delete(streamKey);
       }
     }

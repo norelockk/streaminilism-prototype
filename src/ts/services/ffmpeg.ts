@@ -12,6 +12,7 @@ import { Stream } from 'stream';
 import { promisify } from 'util';
 import yauzl from 'yauzl';
 import { pipeline } from 'stream/promises';
+import { Logger, LogLevel } from '../utils';
 
 const FFMPEG_RELEASE_BASE = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest';
 
@@ -124,7 +125,7 @@ export class FFmpegService {
         // First try to use system FFmpeg
         this.checkSystemFFmpeg();
       } catch (error) {
-        console.log('[FFmpeg] System FFmpeg not found, downloading bundled version...');
+        Logger.log(LogLevel.INFO, 'System FFmpeg not found, downloading bundled version...');
         await this.downloadFFmpeg();
       } finally {
         this.initialized = true;
@@ -139,7 +140,7 @@ export class FFmpegService {
     try {
       execSync('ffmpeg -version', { stdio: 'ignore' });
       execSync('ffprobe -version', { stdio: 'ignore' });
-      console.log('[FFmpeg] Using system FFmpeg installation');
+      Logger.log(LogLevel.INFO, 'Using system FFmpeg installation');
     } catch (error) {
       throw new Error('System FFmpeg/FFprobe not found');
     }
@@ -270,13 +271,13 @@ export class FFmpegService {
 
     // Check if binaries already exist
     if (fs.existsSync(binaryPaths.ffmpeg) && fs.existsSync(binaryPaths.ffprobe)) {
-      console.log('[FFmpeg] FFmpeg binaries already exist, skipping download');
+      Logger.log(LogLevel.INFO, 'FFmpeg binaries already exist, skipping download');
       ffmpeg.setFfmpegPath(binaryPaths.ffmpeg);
       ffmpeg.setFfprobePath(binaryPaths.ffprobe);
       return;
     }
 
-    console.log(`[FFmpeg] Downloading FFmpeg from ${this.config.url}`);
+    Logger.log(LogLevel.INFO, `Downloading FFmpeg from ${this.config.url}`);
     
     try {
       const response = await axios({
@@ -306,9 +307,9 @@ export class FFmpegService {
       ffmpeg.setFfmpegPath(binaryPaths.ffmpeg);
       ffmpeg.setFfprobePath(binaryPaths.ffprobe);
       
-      console.log('[FFmpeg] Successfully downloaded and configured FFmpeg');
+      Logger.log(LogLevel.INFO, 'Successfully downloaded and configured FFmpeg');
     } catch (error) {
-      console.error('[FFmpeg] Error downloading FFmpeg:', error);
+      Logger.log(LogLevel.ERROR, 'Error downloading FFmpeg:', error);
       throw error;
     } finally {
       // Cleanup temp file
